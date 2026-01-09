@@ -6,3 +6,18 @@ node_modules
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+.env
+*.p8
+
+.yarn
+.vscode
+
+TODO.md
+
+lambda/dist
+
+cdk-outputs.json
+cdk.context.json
+
+backups/
