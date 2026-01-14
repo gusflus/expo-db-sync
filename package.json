@@ -23,7 +23,8 @@
   },
   "workspaces": {
     "packages": [
-      "apps/expo-app",
+      "apps/*",
+      "packages/*",
       "lambda"
     ]
   }
