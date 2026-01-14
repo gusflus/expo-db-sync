@@ -1,23 +1,8 @@
-import {
-  createUser,
-  deleteAllUsers,
-  initDatabase,
-  sqliteDb,
-  useLiveQuery,
-  user,
-} from "db";
-import React, { useEffect } from "react";
+import { createUser, deleteAllUsers, sqliteDb, useLiveQuery, user } from "db";
+import React from "react";
 import { Alert, Button, Text, View } from "react-native";
 
 export default function Index() {
-  useEffect(() => {
-    try {
-      initDatabase();
-    } catch (e) {
-      console.error("DB init error", e);
-    }
-  }, []);
-
   // Live query that re-renders when users change
   const { data } = useLiveQuery(sqliteDb.select().from(user));
 

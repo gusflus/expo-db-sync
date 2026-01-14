@@ -6,6 +6,5 @@ export {
   baseSqliteDb,
   createUser,
   deleteAllUsers,
-  initDatabase,
   db as sqliteDb,
 } from "./sqlite";
