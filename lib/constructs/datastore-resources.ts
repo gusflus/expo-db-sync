@@ -39,11 +39,17 @@ export class DatastoreResources extends Construct {
       projectionType: cdk.aws_dynamodb.ProjectionType.ALL,
     });
 
+    // GSI to query items by entity type and updatedAt (sort key) so we can efficiently
+    // fetch items modified after a timestamp (used by sync operation)
     this.table.addGlobalSecondaryIndex({
       indexName: "entityType-index",
       partitionKey: {
         name: "entityType",
         type: cdk.aws_dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "updatedAt",
+        type: cdk.aws_dynamodb.AttributeType.NUMBER,
       },
       projectionType: cdk.aws_dynamodb.ProjectionType.ALL,
     });

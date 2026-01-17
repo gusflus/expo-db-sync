@@ -6,7 +6,9 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "cdk:build": "tsc -p lambda/tsconfig.json && cp lambda/package.json lambda/dist/ || true && (cd lambda/dist && npm install --omit=dev)",
+    "cdk:deploy": "yarn cdk:build && cdk deploy --require-approval never"
   },
   "devDependencies": {
     "@types/jest": "^30",
@@ -25,7 +27,7 @@
     "packages": [
       "apps/*",
       "packages/*",
-      "lambda"
+      "lambda/*"
     ]
   }
 }

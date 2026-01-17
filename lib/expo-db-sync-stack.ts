@@ -12,49 +12,39 @@ export class ExpoDbSyncStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Cognito User Pool for API auth
-    const userPool = new cdk.aws_cognito.UserPool(this, "UserPool", {
-      selfSignUpEnabled: true,
-      userPoolName: `${this.stackName}-users`,
-      signInAliases: { email: true },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    // API resources (creates RestApi and optional authorizer)
+    // API Gateway
     const apiResources = new ApiResources(this, "ApiResources", {
-      userPool,
-      createAuthorizer: true,
+      createAuthorizer: false,
     });
 
-    // Add a simple /items GET endpoint (mock integration) protected by Cognito
-    const items = apiResources.api.root.addResource("items");
-    items.addMethod(
-      "GET",
-      new cdk.aws_apigateway.MockIntegration({
-        integrationResponses: [
-          {
-            statusCode: "200",
-            responseTemplates: {
-              "application/json": JSON.stringify({
-                table: "${datastore.table.tableName}",
-              }),
-            },
-          },
-        ],
-        requestTemplates: { "application/json": '{"statusCode": 200}' },
-      }),
-      {
-        methodResponses: [{ statusCode: "200" }],
-        authorizationType: cdk.aws_apigateway.AuthorizationType.COGNITO,
-        authorizer: apiResources.authorizer,
-      }
-    );
+    // Sync Lambda - handles incoming items and returns items updated after lastSyncTimestamp
+    const syncFn = new cdk.aws_lambda.Function(this, "SyncHandler", {
+      runtime: cdk.aws_lambda.Runtime.NODEJS_18_X,
+      handler: "index.handler",
+      code: cdk.aws_lambda.Code.fromAsset(
+        require("path").join(__dirname, "..", "lambda", "dist")
+      ),
+      environment: {
+        TABLE_NAME: datastore.table.tableName,
+        ENTITY_INDEX: "entityType-index",
+      },
+    });
+
+    // Allow Lambda to read/write the table
+    datastore.table.grantReadWriteData(syncFn);
+
+    // Wire the sync endpoint: POST /sync/{entityType}
+    const sync = apiResources.api.root
+      .addResource("sync")
+      .addResource("{entityType}");
+    const syncIntegration = new cdk.aws_apigateway.LambdaIntegration(syncFn);
+    sync.addMethod("POST", syncIntegration);
 
     new cdk.CfnOutput(this, "ApiUrl", {
       value: apiResources.api.url,
     });
 
-    new cdk.CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
     new cdk.CfnOutput(this, "TableName", { value: datastore.table.tableName });
+    new cdk.CfnOutput(this, "SyncFunctionName", { value: syncFn.functionName });
   }
 }
