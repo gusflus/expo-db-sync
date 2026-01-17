@@ -8,3 +8,10 @@ export {
   deleteAllUsers,
   db as sqliteDb,
 } from "./sqlite";
+export {
+  SyncEngine,
+  createTodo,
+  deleteTodo,
+  getActiveTodos,
+  updateTodo,
+} from "./sync";
