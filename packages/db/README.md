@@ -4,7 +4,6 @@ This package contains the shared database logic and schema for the monorepo.
 
 - Exports the Drizzle `db` instance and `baseSqliteDb` for Expo (via `expo-sqlite`).
 - Manages schema with Drizzle migrations; do not rely on runtime table creation.
-- Provides `createUser()` as a small helper that uses Drizzle `insert`.
 - Re-exports `useLiveQuery` and `useMigrations` for convenience in the Expo app.
 
 How to generate migrations (from the app):

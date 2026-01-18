@@ -1,5 +1,5 @@
 import { InferSelectModel } from "drizzle-orm";
-import { image, user } from "./expo/schema";
+import { image } from "./expo/schema";
 
 export type UUID = `${string}-${string}-${string}-${string}-${string}`;
 
@@ -13,5 +13,4 @@ export interface SchemaType {
  * Auto-generated types from Drizzle schema
  * These ensure types stay in sync with database schema definitions
  */
-export type User = InferSelectModel<typeof user>;
 export type Image = InferSelectModel<typeof image>;

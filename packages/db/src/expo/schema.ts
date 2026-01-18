@@ -19,14 +19,6 @@ export const image = sqliteTable("images", {
   ...timestamps,
 });
 
-export const user = sqliteTable("users", {
-  id: text("id").primaryKey(),
-  username: text("username", { length: 255 }).notNull(),
-  name: text("name", { length: 255 }).notNull(),
-  email: text("email", { length: 255 }).notNull(),
-  ...timestamps,
-});
-
 export const todo = sqliteTable("todos", {
   id: text("id").primaryKey(),
   title: text("title", { length: 500 }).notNull(),
