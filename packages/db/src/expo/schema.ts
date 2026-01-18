@@ -7,8 +7,8 @@ export const timestamps = {
     .notNull(),
   updatedAt: integer("updated_at")
     .default(sql`(unixepoch() * 1000)`)
-    .notNull(),
-  // .$onUpdate(() => sql`(unixepoch() * 1000)`),
+    .notNull()
+    .$onUpdate(() => sql`(unixepoch() * 1000)`),
   deletedAt: integer("deleted_at"),
 };
 

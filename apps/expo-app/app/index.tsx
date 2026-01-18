@@ -1,12 +1,12 @@
 import type { Todo } from "db";
 import {
   clearAllTables,
-  createTodo,
-  deleteTodo,
+  createEntity,
+  deleteEntity,
   sqliteDb,
   SyncEngine,
   todo as todoTable,
-  updateTodo,
+  updateEntity,
   useLiveQuery,
 } from "db";
 import { isNull } from "drizzle-orm";
@@ -45,7 +45,10 @@ export default function Index() {
     if (!newTodoTitle.trim()) return;
 
     try {
-      createTodo(sqliteDb, { title: newTodoTitle.trim() });
+      createEntity<Todo>(sqliteDb, todoTable, {
+        title: newTodoTitle.trim(),
+        completed: false,
+      });
       setNewTodoTitle("");
     } catch (e) {
       console.error("Error creating todo:", e);
@@ -55,7 +58,7 @@ export default function Index() {
 
   const handleToggleTodo = (id: string, completed: boolean) => {
     try {
-      updateTodo(sqliteDb, id, { completed: !completed });
+      updateEntity<Todo>(sqliteDb, todoTable, id, { completed: !completed });
     } catch (e) {
       console.error("Error updating todo:", e);
       Alert.alert("Error", "Failed to update todo");
@@ -70,7 +73,7 @@ export default function Index() {
         style: "destructive",
         onPress: () => {
           try {
-            deleteTodo(sqliteDb, id);
+            deleteEntity(sqliteDb, todoTable, id);
           } catch (e) {
             console.error("Error deleting todo:", e);
             Alert.alert("Error", "Failed to delete todo");
