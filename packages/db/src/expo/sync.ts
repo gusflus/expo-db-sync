@@ -335,47 +335,7 @@ export function getActiveEntities<T extends SyncableEntity>(
     .all() as T[];
 }
 
-/**
- * Legacy todo-specific helpers for backwards compatibility
- */
 
-/**
- * Create a new todo locally
- */
-export function createTodo(
-  db: ExpoSQLiteDatabase<any>,
-  todo: { title: string; completed?: boolean }
-) {
-  return createEntity<Todo>(db, todoTable, {
-    title: todo.title,
-    completed: todo.completed ?? false,
-  });
-}
-
-/**
- * Update a todo locally
- */
-export function updateTodo(
-  db: ExpoSQLiteDatabase<any>,
-  id: string,
-  updates: { title?: string; completed?: boolean }
-) {
-  return updateEntity<Todo>(db, todoTable, id, updates);
-}
-
-/**
- * Soft delete a todo locally
- */
-export function deleteTodo(db: ExpoSQLiteDatabase<any>, id: string) {
-  return deleteEntity(db, todoTable, id);
-}
-
-/**
- * Get all active (non-deleted) todos
- */
-export function getActiveTodos(db: ExpoSQLiteDatabase<any>): Todo[] {
-  return getActiveEntities<Todo>(db, todoTable);
-}
 
 /**
  * Remove all rows from all tables (test helper)

@@ -6,8 +6,8 @@ export { baseSqliteDb, db as sqliteDb } from "./sqlite";
 export {
   SyncEngine,
   clearAllTables,
-  createTodo,
-  deleteTodo,
-  getActiveTodos,
-  updateTodo,
+  createEntity,
+  deleteEntity,
+  getActiveEntities,
+  updateEntity,
 } from "./sync";
