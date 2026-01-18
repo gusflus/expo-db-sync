@@ -381,7 +381,9 @@ export function getActiveTodos(db: ExpoSQLiteDatabase<any>): Todo[] {
  * Remove all rows from all tables (test helper)
  * Use with care — this permanently removes local data and is intended for UI testing.
  */
-export async function clearAllTables(db: ExpoSQLiteDatabase<any>): Promise<void> {
+export async function clearAllTables(
+  db: ExpoSQLiteDatabase<any>
+): Promise<void> {
   try {
     // Delete all todos and images
     db.delete(todoTable).run();

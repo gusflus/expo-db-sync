@@ -1,3 +1,4 @@
+import type { Todo } from "db";
 import {
   clearAllTables,
   createTodo,
@@ -8,7 +9,6 @@ import {
   updateTodo,
   useLiveQuery,
 } from "db";
-import type { Todo } from "db";
 import { isNull } from "drizzle-orm";
 import React, { useState } from "react";
 import {
