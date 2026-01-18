@@ -4,10 +4,10 @@ export * from "../types";
 export * from "./schema";
 export { baseSqliteDb, db as sqliteDb } from "./sqlite";
 export {
-  SyncEngine,
   clearAllTables,
   createEntity,
   deleteEntity,
   getActiveEntities,
+  SyncEngine,
   updateEntity,
 } from "./sync";

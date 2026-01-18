@@ -2,12 +2,7 @@ import { eq, isNull } from "drizzle-orm";
 import type { ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import type { SQLiteTableWithColumns } from "drizzle-orm/sqlite-core";
 import Storage from "expo-sqlite/kv-store";
-import type {
-  SyncRequest,
-  SyncResponse,
-  SyncableEntity,
-  Todo,
-} from "../schema";
+import type { SyncRequest, SyncResponse, SyncableEntity } from "../schema";
 import { image as imageTable, todo as todoTable } from "./schema";
 
 /**
@@ -334,8 +329,6 @@ export function getActiveEntities<T extends SyncableEntity>(
     .where(isNull((table as any).deletedAt))
     .all() as T[];
 }
-
-
 
 /**
  * Remove all rows from all tables (test helper)
