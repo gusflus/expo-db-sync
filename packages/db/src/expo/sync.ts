@@ -41,15 +41,24 @@ export class SyncEngine {
   }
 
   /**
-   * Get all local changes that need to be synced to server
-   * Returns ALL items (including soft-deleted) so server gets deletedAt updates
+   * Get local changes that need to be synced to server
+   * Returns only items updated or deleted since the last sync
    */
-  private getLocalChanges(): Todo[] {
-    // Get all todos - including deleted ones so server knows they were deleted
-    // In a more advanced implementation, you'd track which items are "dirty"
-    const todos = this.db.select().from(todoTable).all();
+  private getLocalChanges(lastSyncTimestamp: number | null): Todo[] {
+    // Get all todos, then filter to only those changed since last sync
+    const todos = this.db.select().from(todoTable).all() as Todo[];
 
-    return todos as Todo[];
+    if (!lastSyncTimestamp) {
+      // First sync - send everything
+      return todos;
+    }
+
+    // Only return items that have been updated or deleted since last sync
+    return todos.filter(
+      (todo) =>
+        todo.updatedAt > lastSyncTimestamp ||
+        (todo.deletedAt !== null && todo.deletedAt > lastSyncTimestamp)
+    );
   }
 
   /**
@@ -101,7 +110,9 @@ export class SyncEngine {
    * Sync todos with the server with pagination support
    * Pushes local changes and pulls remote changes in pages
    */
-  async syncTodos(pageSize: number = 100): Promise<{ synced: number; pulled: number }> {
+  async syncTodos(
+    pageSize: number = 128
+  ): Promise<{ synced: number; pulled: number }> {
     // Prevent concurrent syncs
     if (this.isSyncing) {
       throw new Error("Sync already in progress");
@@ -110,7 +121,7 @@ export class SyncEngine {
     this.isSyncing = true;
     try {
       const lastSyncTimestamp = await this.getLastSyncTimestamp();
-      const localChanges = this.getLocalChanges();
+      const localChanges = this.getLocalChanges(lastSyncTimestamp);
 
       // Upload local changes in pages
       let totalSynced = 0;
@@ -125,7 +136,11 @@ export class SyncEngine {
       let hasMore = true;
 
       while (hasMore) {
-        const result = await this.downloadChanges(lastSyncTimestamp, page, pageSize);
+        const result = await this.downloadChanges(
+          lastSyncTimestamp,
+          page,
+          pageSize
+        );
         totalPulled += result.pulled;
         hasMore = result.hasMore;
         page++;
@@ -167,9 +182,7 @@ export class SyncEngine {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Sync failed: ${response.status} ${response.statusText}`
-      );
+      throw new Error(`Sync failed: ${response.status} ${response.statusText}`);
     }
 
     const data = (await response.json()) as SyncResponse;
@@ -203,9 +216,7 @@ export class SyncEngine {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Sync failed: ${response.status} ${response.statusText}`
-      );
+      throw new Error(`Sync failed: ${response.status} ${response.statusText}`);
     }
 
     const data = (await response.json()) as SyncResponse;
