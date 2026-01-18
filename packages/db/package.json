@@ -6,7 +6,7 @@
   "packageManager": "yarn@4.9.2",
   "exports": {
     ".": "./src/index.ts",
-    "./migrations": "./drizzle/migrations.js"
+    "./migrations": "./src/migrations.ts"
   },
   "peerDependencies": {
     "drizzle-orm": "workspace:*",

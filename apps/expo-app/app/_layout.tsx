@@ -9,7 +9,9 @@ export default function RootLayout() {
   const { success, error } = useMigrations(sqliteDb, migrations);
 
   useEffect(() => {
-    console.log("Migration status:", { success, error: error?.message });
+    if (error) {
+      console.log({ success, error: error?.message });
+    }
   }, [success, error]);
 
   if (error) {

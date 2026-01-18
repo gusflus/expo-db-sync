@@ -13,7 +13,8 @@ cdk.out
 .yarn
 .vscode
 
-TODO.md
+*.md
+!README.md
 
 lambda/dist
 
