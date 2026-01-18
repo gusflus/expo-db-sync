@@ -17,10 +17,15 @@ export type NewTodo = Omit<Todo, "createdAt" | "updatedAt" | "deletedAt">;
 export interface SyncRequest {
   lastSyncTimestamp: number | null; // null for first sync
   items: Todo[]; // Local changes to push to server
+  page?: number; // Page number for pagination (0-indexed, defaults to 0)
+  pageSize?: number; // Items per page (defaults to 100)
 }
 
 export interface SyncResponse {
   items: Todo[]; // Server changes to pull to client
   syncTimestamp: number; // New timestamp to save for next sync
   synced: number; // Number of items synced from client to server
+  hasMore: boolean; // Whether there are more items to fetch
+  page: number; // Current page number
+  pageSize: number; // Items per page
 }

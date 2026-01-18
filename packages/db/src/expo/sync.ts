@@ -98,10 +98,10 @@ export class SyncEngine {
   }
 
   /**
-   * Sync todos with the server
-   * Pushes local changes and pulls remote changes
+   * Sync todos with the server with pagination support
+   * Pushes local changes and pulls remote changes in pages
    */
-  async syncTodos(): Promise<{ synced: number; pulled: number }> {
+  async syncTodos(pageSize: number = 100): Promise<{ synced: number; pulled: number }> {
     // Prevent concurrent syncs
     if (this.isSyncing) {
       throw new Error("Sync already in progress");
@@ -112,44 +112,28 @@ export class SyncEngine {
       const lastSyncTimestamp = await this.getLastSyncTimestamp();
       const localChanges = this.getLocalChanges();
 
-      const request: SyncRequest = {
-        lastSyncTimestamp,
-        items: localChanges,
-      };
-
-      const response = await fetch(`${this.apiUrl}/sync/todos`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(this.authToken
-            ? { Authorization: `Bearer ${this.authToken}` }
-            : {}),
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Sync failed: ${response.status} ${response.statusText}`
-        );
+      // Upload local changes in pages
+      let totalSynced = 0;
+      for (let i = 0; i < localChanges.length; i += pageSize) {
+        const chunk = localChanges.slice(i, i + pageSize);
+        totalSynced += await this.uploadChanges(chunk, lastSyncTimestamp);
       }
 
-      const data = (await response.json()) as SyncResponse;
+      // Download remote changes in pages
+      let totalPulled = 0;
+      let page = 0;
+      let hasMore = true;
 
-      // Only apply remote items that are NOT soft-deleted. We do not pull
-      // soft-deleted items from the server to avoid resurrecting deletions
-      // on the client side.
-      const remoteItems = data.items.filter((item) => item.deletedAt == null);
-
-      // Apply remote changes to local database
-      this.applyRemoteChanges(remoteItems);
-
-      // Save new sync timestamp
-      await this.saveLastSyncTimestamp(data.syncTimestamp);
+      while (hasMore) {
+        const result = await this.downloadChanges(lastSyncTimestamp, page, pageSize);
+        totalPulled += result.pulled;
+        hasMore = result.hasMore;
+        page++;
+      }
 
       return {
-        synced: data.synced,
-        pulled: remoteItems.length,
+        synced: totalSynced,
+        pulled: totalPulled,
       };
     } catch (error) {
       console.error("Sync error:", error);
@@ -157,6 +141,93 @@ export class SyncEngine {
     } finally {
       this.isSyncing = false;
     }
+  }
+
+  /**
+   * Upload a page of local changes to the server
+   */
+  private async uploadChanges(
+    items: Todo[],
+    lastSyncTimestamp: number | null
+  ): Promise<number> {
+    const request: SyncRequest = {
+      lastSyncTimestamp,
+      items,
+    };
+
+    const response = await fetch(`${this.apiUrl}/sync/todos`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(this.authToken
+          ? { Authorization: `Bearer ${this.authToken}` }
+          : {}),
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Sync failed: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = (await response.json()) as SyncResponse;
+    return data.synced;
+  }
+
+  /**
+   * Download a page of remote changes from the server
+   */
+  private async downloadChanges(
+    lastSyncTimestamp: number | null,
+    page: number,
+    pageSize: number
+  ): Promise<{ pulled: number; hasMore: boolean; syncTimestamp: number }> {
+    const request: SyncRequest = {
+      lastSyncTimestamp,
+      items: [], // No items to upload in download-only request
+      page,
+      pageSize,
+    };
+
+    const response = await fetch(`${this.apiUrl}/sync/todos`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(this.authToken
+          ? { Authorization: `Bearer ${this.authToken}` }
+          : {}),
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Sync failed: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = (await response.json()) as SyncResponse;
+
+    // Only apply remote items that are NOT soft-deleted. We do not pull
+    // soft-deleted items from the server to avoid resurrecting deletions
+    // on the client side.
+    const remoteItems = data.items.filter((item) => item.deletedAt == null);
+
+    // Apply remote changes to local database
+    this.applyRemoteChanges(remoteItems);
+
+    // Save new sync timestamp only on last page
+    if (!data.hasMore) {
+      await this.saveLastSyncTimestamp(data.syncTimestamp);
+    }
+
+    return {
+      pulled: remoteItems.length,
+      hasMore: data.hasMore,
+      syncTimestamp: data.syncTimestamp,
+    };
   }
 }
 

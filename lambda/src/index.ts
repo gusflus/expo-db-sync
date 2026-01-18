@@ -22,6 +22,8 @@ export const handler = async (event: any) => {
     const body = event.body ? JSON.parse(event.body) : {};
     const items = Array.isArray(body.items) ? body.items : [];
     const lastSyncTimestamp = body.lastSyncTimestamp ?? null;
+    const page = body.page ?? 0;
+    const pageSize = body.pageSize ?? 100;
 
     // Upsert incoming items into DynamoDB (batch write)
     let processed = 0;
@@ -58,11 +60,13 @@ export const handler = async (event: any) => {
       }
     }
 
-    // Query for items updated after lastSyncTimestamp
+    // Query for items updated after lastSyncTimestamp with pagination
     const outgoingItems: any[] = [];
+    const allItems: any[] = [];
+    let lastKey: any | undefined = undefined;
+
     if (lastSyncTimestamp != null) {
       const lastSync = Number(lastSyncTimestamp);
-      let lastKey: any | undefined = undefined;
 
       do {
         const params: any = {
@@ -74,13 +78,11 @@ export const handler = async (event: any) => {
         if (lastKey) params.ExclusiveStartKey = lastKey;
 
         const q = await ddb.send(new QueryCommand(params));
-        outgoingItems.push(...(q.Items ?? []));
+        allItems.push(...(q.Items ?? []));
         lastKey = q.LastEvaluatedKey;
       } while (lastKey);
     } else {
       // First sync - return all items (not deleted)
-      let lastKey: any | undefined = undefined;
-
       do {
         const params: any = {
           TableName: TABLE,
@@ -91,13 +93,19 @@ export const handler = async (event: any) => {
         if (lastKey) params.ExclusiveStartKey = lastKey;
 
         const q = await ddb.send(new QueryCommand(params));
-        outgoingItems.push(...(q.Items ?? []));
+        allItems.push(...(q.Items ?? []));
         lastKey = q.LastEvaluatedKey;
       } while (lastKey);
     }
 
+    // Apply pagination
+    const startIndex = page * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedItems = allItems.slice(startIndex, endIndex);
+    const hasMore = endIndex < allItems.length;
+
     // Remove entityType field from outgoing items
-    const cleanedItems = outgoingItems.map(
+    const cleanedItems = paginatedItems.map(
       ({ entityType: _, ...item }) => item
     );
 
@@ -109,6 +117,9 @@ export const handler = async (event: any) => {
         synced: processed,
         items: cleanedItems,
         syncTimestamp,
+        hasMore,
+        page,
+        pageSize,
       }),
     };
   } catch (err) {
