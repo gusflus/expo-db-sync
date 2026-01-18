@@ -1,5 +1,5 @@
 {
-  "name": "apple-auth-lambda",
+  "name": "sync-lambda",
   "version": "1.0.0",
   "main": "dist/index.js",
   "dependencies": {
