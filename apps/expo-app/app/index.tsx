@@ -8,6 +8,7 @@ import {
   updateTodo,
   useLiveQuery,
 } from "db";
+import type { Todo } from "db";
 import { isNull } from "drizzle-orm";
 import React, { useState } from "react";
 import {
@@ -20,11 +21,16 @@ import {
   View,
 } from "react-native";
 
-// Initialize sync engine
-const syncEngine = new SyncEngine(sqliteDb, process.env.EXPO_PUBLIC_API_URL!);
+// Initialize sync engine for todos
+const todoSyncEngine = new SyncEngine<Todo>(
+  sqliteDb,
+  todoTable,
+  "todos",
+  process.env.EXPO_PUBLIC_API_URL!
+);
 
 // Set auth token (in a real app, you'd get this from Cognito)
-// syncEngine.setAuthToken("your-auth-token");
+// todoSyncEngine.setAuthToken("your-auth-token");
 
 export default function Index() {
   const [newTodoTitle, setNewTodoTitle] = useState("");
@@ -77,7 +83,7 @@ export default function Index() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const result = await syncEngine.syncTodos();
+      const result = await todoSyncEngine.sync();
       Alert.alert(
         "Sync Complete",
         `Synced ${result.synced} local changes\nPulled ${result.pulled} remote changes`
@@ -99,9 +105,9 @@ export default function Index() {
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
             try {
-              clearAllTables(sqliteDb);
+              await clearAllTables(sqliteDb);
             } catch (e) {
               console.error("Clear all failed:", e);
               Alert.alert("Error", "Failed to clear database");

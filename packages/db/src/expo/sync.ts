@@ -1,20 +1,36 @@
 import { eq, isNull } from "drizzle-orm";
 import type { ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
+import type { SQLiteTableWithColumns } from "drizzle-orm/sqlite-core";
 import Storage from "expo-sqlite/kv-store";
-import type { SyncRequest, SyncResponse, Todo } from "../schema";
+import type {
+  SyncRequest,
+  SyncResponse,
+  SyncableEntity,
+  Todo,
+} from "../schema";
 import { image as imageTable, todo as todoTable } from "./schema";
 
 /**
- * Sync engine for syncing local SQLite changes with remote DynamoDB
+ * Generic sync engine for syncing local SQLite changes with remote backend
+ * Supports any entity type that extends SyncableEntity
  */
-export class SyncEngine {
+export class SyncEngine<T extends SyncableEntity> {
   private db: ExpoSQLiteDatabase<any>;
+  private table: SQLiteTableWithColumns<any>;
+  private entityType: string;
   private apiUrl: string;
   private authToken: string | null = null;
   private isSyncing: boolean = false;
 
-  constructor(db: ExpoSQLiteDatabase<any>, apiUrl: string) {
+  constructor(
+    db: ExpoSQLiteDatabase<any>,
+    table: SQLiteTableWithColumns<any>,
+    entityType: string,
+    apiUrl: string
+  ) {
     this.db = db;
+    this.table = table;
+    this.entityType = entityType;
     this.apiUrl = apiUrl;
   }
 
@@ -26,96 +42,96 @@ export class SyncEngine {
   }
 
   /**
-   * Get last sync timestamp from local storage
+   * Get last sync timestamp from local storage for this entity type
    */
   private async getLastSyncTimestamp(): Promise<number | null> {
-    const stored = await Storage.getItem("lastSyncTimestamp");
+    const key = `lastSyncTimestamp:${this.entityType}`;
+    const stored = await Storage.getItem(key);
     return stored ? Number(stored) : null;
   }
 
   /**
-   * Save sync timestamp to local storage
+   * Save sync timestamp to local storage for this entity type
    */
   private async saveLastSyncTimestamp(timestamp: number): Promise<void> {
-    await Storage.setItem("lastSyncTimestamp", String(timestamp));
+    const key = `lastSyncTimestamp:${this.entityType}`;
+    await Storage.setItem(key, String(timestamp));
   }
 
   /**
    * Get local changes that need to be synced to server
    * Returns only items updated or deleted since the last sync
    */
-  private getLocalChanges(lastSyncTimestamp: number | null): Todo[] {
-    // Get all todos, then filter to only those changed since last sync
-    const todos = this.db.select().from(todoTable).all() as Todo[];
+  private getLocalChanges(lastSyncTimestamp: number | null): T[] {
+    // Get all items from the table
+    const items = this.db.select().from(this.table).all() as T[];
 
     if (!lastSyncTimestamp) {
       // First sync - send everything
-      return todos;
+      return items;
     }
 
     // Only return items that have been updated or deleted since last sync
-    return todos.filter(
-      (todo) =>
-        todo.updatedAt > lastSyncTimestamp ||
-        (todo.deletedAt !== null && todo.deletedAt > lastSyncTimestamp)
+    return items.filter(
+      (item) =>
+        item.updatedAt > lastSyncTimestamp ||
+        (item.deletedAt !== null && item.deletedAt > lastSyncTimestamp)
     );
   }
 
   /**
    * Apply remote changes to local database
    */
-  private applyRemoteChanges(items: Todo[]): void {
+  private applyRemoteChanges(items: T[]): void {
     for (const item of items) {
       // Check if item exists locally
       const existing = this.db
         .select()
-        .from(todoTable)
-        .where(eq(todoTable.id, item.id))
-        .get();
+        .from(this.table)
+        .where(eq((this.table as any).id, item.id))
+        .get() as T | undefined;
 
       if (existing) {
         // Update existing item if remote is newer
-        if (item.updatedAt > (existing as Todo).updatedAt) {
+        if (item.updatedAt > existing.updatedAt) {
           if (item.deletedAt !== null) {
             // Soft delete
             this.db
-              .update(todoTable)
+              .update(this.table)
               .set({
                 deletedAt: item.deletedAt,
               })
-              .where(eq(todoTable.id, item.id))
+              .where(eq((this.table as any).id, item.id))
               .run();
           } else {
-            // Update
+            // Update with all properties from remote item
             this.db
-              .update(todoTable)
-              .set({
-                title: item.title,
-                completed: item.completed,
-                updatedAt: item.updatedAt,
-                deletedAt: item.deletedAt,
-              })
-              .where(eq(todoTable.id, item.id))
+              .update(this.table)
+              .set(item as any)
+              .where(eq((this.table as any).id, item.id))
               .run();
           }
         }
       } else {
         // Insert new item
-        this.db.insert(todoTable).values(item).run();
+        this.db
+          .insert(this.table)
+          .values(item as any)
+          .run();
       }
     }
   }
 
   /**
-   * Sync todos with the server with pagination support
+   * Sync with the server with pagination support
    * Pushes local changes and pulls remote changes in pages
    */
-  async syncTodos(
+  async sync(
     pageSize: number = 128
   ): Promise<{ synced: number; pulled: number }> {
     // Prevent concurrent syncs
     if (this.isSyncing) {
-      throw new Error("Sync already in progress");
+      throw new Error(`Sync already in progress for ${this.entityType}`);
     }
 
     this.isSyncing = true;
@@ -151,7 +167,7 @@ export class SyncEngine {
         pulled: totalPulled,
       };
     } catch (error) {
-      console.error("Sync error:", error);
+      console.error(`Sync error for ${this.entityType}:`, error);
       throw error;
     } finally {
       this.isSyncing = false;
@@ -162,15 +178,15 @@ export class SyncEngine {
    * Upload a page of local changes to the server
    */
   private async uploadChanges(
-    items: Todo[],
+    items: T[],
     lastSyncTimestamp: number | null
   ): Promise<number> {
-    const request: SyncRequest = {
+    const request: SyncRequest<T> = {
       lastSyncTimestamp,
       items,
     };
 
-    const response = await fetch(`${this.apiUrl}/sync/todos`, {
+    const response = await fetch(`${this.apiUrl}/sync/${this.entityType}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -182,10 +198,12 @@ export class SyncEngine {
     });
 
     if (!response.ok) {
-      throw new Error(`Sync failed: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Sync failed for ${this.entityType}: ${response.status} ${response.statusText}`
+      );
     }
 
-    const data = (await response.json()) as SyncResponse;
+    const data = (await response.json()) as SyncResponse<T>;
     return data.synced;
   }
 
@@ -197,14 +215,14 @@ export class SyncEngine {
     page: number,
     pageSize: number
   ): Promise<{ pulled: number; hasMore: boolean; syncTimestamp: number }> {
-    const request: SyncRequest = {
+    const request: SyncRequest<T> = {
       lastSyncTimestamp,
       items: [], // No items to upload in download-only request
       page,
       pageSize,
     };
 
-    const response = await fetch(`${this.apiUrl}/sync/todos`, {
+    const response = await fetch(`${this.apiUrl}/sync/${this.entityType}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -216,10 +234,12 @@ export class SyncEngine {
     });
 
     if (!response.ok) {
-      throw new Error(`Sync failed: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Sync failed for ${this.entityType}: ${response.status} ${response.statusText}`
+      );
     }
 
-    const data = (await response.json()) as SyncResponse;
+    const data = (await response.json()) as SyncResponse<T>;
 
     // Only apply remote items that are NOT soft-deleted. We do not pull
     // soft-deleted items from the server to avoid resurrecting deletions
@@ -243,24 +263,93 @@ export class SyncEngine {
 }
 
 /**
+ * Generic function to create a new entity locally
+ */
+export function createEntity<T extends SyncableEntity>(
+  db: ExpoSQLiteDatabase<any>,
+  table: SQLiteTableWithColumns<any>,
+  data: Omit<T, "id" | "createdAt" | "updatedAt" | "deletedAt">
+): T {
+  const now = Date.now();
+  const newEntity = {
+    ...data,
+    id: `${now}-${Math.random().toString(36).substring(2, 9)}`,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  } as T;
+
+  db.insert(table)
+    .values(newEntity as any)
+    .run();
+  return newEntity;
+}
+
+/**
+ * Generic function to update an entity locally
+ */
+export function updateEntity<T extends SyncableEntity>(
+  db: ExpoSQLiteDatabase<any>,
+  table: SQLiteTableWithColumns<any>,
+  id: string,
+  updates: Partial<Omit<T, "id" | "createdAt" | "deletedAt">>
+) {
+  const now = Date.now();
+  db.update(table)
+    .set({
+      ...updates,
+      updatedAt: now,
+    } as any)
+    .where(eq((table as any).id, id))
+    .run();
+}
+
+/**
+ * Generic function to soft delete an entity locally
+ */
+export function deleteEntity(
+  db: ExpoSQLiteDatabase<any>,
+  table: SQLiteTableWithColumns<any>,
+  id: string
+) {
+  const now = Date.now();
+  db.update(table)
+    .set({
+      deletedAt: now,
+    } as any)
+    .where(eq((table as any).id, id))
+    .run();
+}
+
+/**
+ * Generic function to get all active (non-deleted) entities
+ */
+export function getActiveEntities<T extends SyncableEntity>(
+  db: ExpoSQLiteDatabase<any>,
+  table: SQLiteTableWithColumns<any>
+): T[] {
+  return db
+    .select()
+    .from(table)
+    .where(isNull((table as any).deletedAt))
+    .all() as T[];
+}
+
+/**
+ * Legacy todo-specific helpers for backwards compatibility
+ */
+
+/**
  * Create a new todo locally
  */
 export function createTodo(
   db: ExpoSQLiteDatabase<any>,
   todo: { title: string; completed?: boolean }
 ) {
-  const now = Date.now();
-  const newTodo: Todo = {
-    id: `${now}-${Math.random().toString(36).substring(2, 9)}`,
+  return createEntity<Todo>(db, todoTable, {
     title: todo.title,
     completed: todo.completed ?? false,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-  };
-
-  db.insert(todoTable).values(newTodo).run();
-  return newTodo;
+  });
 }
 
 /**
@@ -271,49 +360,36 @@ export function updateTodo(
   id: string,
   updates: { title?: string; completed?: boolean }
 ) {
-  const now = Date.now();
-  db.update(todoTable)
-    .set({
-      ...updates,
-      updatedAt: now,
-    })
-    .where(eq(todoTable.id, id))
-    .run();
+  return updateEntity<Todo>(db, todoTable, id, updates);
 }
 
 /**
  * Soft delete a todo locally
  */
 export function deleteTodo(db: ExpoSQLiteDatabase<any>, id: string) {
-  const now = Date.now();
-  db.update(todoTable)
-    .set({
-      deletedAt: now,
-    })
-    .where(eq(todoTable.id, id))
-    .run();
+  return deleteEntity(db, todoTable, id);
 }
 
 /**
  * Get all active (non-deleted) todos
  */
 export function getActiveTodos(db: ExpoSQLiteDatabase<any>): Todo[] {
-  return db
-    .select()
-    .from(todoTable)
-    .where(isNull(todoTable.deletedAt))
-    .all() as Todo[];
+  return getActiveEntities<Todo>(db, todoTable);
 }
 
 /**
  * Remove all rows from all tables (test helper)
  * Use with care — this permanently removes local data and is intended for UI testing.
  */
-export function clearAllTables(db: ExpoSQLiteDatabase<any>): void {
+export async function clearAllTables(db: ExpoSQLiteDatabase<any>): Promise<void> {
   try {
     // Delete all todos and images
     db.delete(todoTable).run();
     db.delete(imageTable).run();
+
+    // Clear sync timestamps so next sync will pull all items from server
+    await Storage.removeItem("lastSyncTimestamp:todos");
+    await Storage.removeItem("lastSyncTimestamp:images");
   } catch (e) {
     console.error("Error clearing tables:", e);
     throw e;
