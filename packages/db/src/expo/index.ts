@@ -5,6 +5,7 @@ export * from "./schema";
 export { baseSqliteDb, db as sqliteDb } from "./sqlite";
 export {
   SyncEngine,
+  clearAllTables,
   createTodo,
   deleteTodo,
   getActiveTodos,

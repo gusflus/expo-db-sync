@@ -1,7 +1,7 @@
 import { eq, isNull } from "drizzle-orm";
 import type { ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import type { SyncRequest, SyncResponse, Todo } from "../schema";
-import { todo as todoTable } from "./schema";
+import { image as imageTable, todo as todoTable } from "./schema";
 
 /**
  * Sync engine for syncing local SQLite changes with remote DynamoDB
@@ -214,4 +214,19 @@ export function getActiveTodos(db: ExpoSQLiteDatabase<any>): Todo[] {
     .from(todoTable)
     .where(isNull(todoTable.deletedAt))
     .all() as Todo[];
+}
+
+/**
+ * Remove all rows from all tables (test helper)
+ * Use with care — this permanently removes local data and is intended for UI testing.
+ */
+export function clearAllTables(db: ExpoSQLiteDatabase<any>): void {
+  try {
+    // Delete all todos and images
+    db.delete(todoTable).run();
+    db.delete(imageTable).run();
+  } catch (e) {
+    console.error("Error clearing tables:", e);
+    throw e;
+  }
 }

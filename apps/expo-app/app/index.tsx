@@ -1,4 +1,5 @@
 import {
+  clearAllTables,
   createTodo,
   deleteTodo,
   sqliteDb,
@@ -89,6 +90,28 @@ export default function Index() {
     }
   };
 
+  const handleClearAll = () => {
+    Alert.alert(
+      "Remove all data",
+      "Remove all items from all tables? This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            try {
+              clearAllTables(sqliteDb);
+            } catch (e) {
+              console.error("Clear all failed:", e);
+              Alert.alert("Error", "Failed to clear database");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={{ flex: 1, padding: 16, paddingTop: 60 }}>
       <Text style={{ fontSize: 24, fontWeight: "bold", marginBottom: 16 }}>
@@ -120,6 +143,15 @@ export default function Index() {
           title={syncing ? "Syncing..." : "Sync with Server"}
           onPress={handleSync}
           disabled={syncing}
+        />
+      </View>
+
+      {/* Remove all data (test only) */}
+      <View style={{ marginBottom: 16 }}>
+        <Button
+          title="Remove all (test)"
+          color="#FF3B30"
+          onPress={handleClearAll}
         />
       </View>
 
