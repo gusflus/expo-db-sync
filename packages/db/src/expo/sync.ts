@@ -1,5 +1,6 @@
 import { eq, isNull } from "drizzle-orm";
 import type { ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
+import Storage from "expo-sqlite/kv-store";
 import type { SyncRequest, SyncResponse, Todo } from "../schema";
 import { image as imageTable, todo as todoTable } from "./schema";
 
@@ -10,6 +11,7 @@ export class SyncEngine {
   private db: ExpoSQLiteDatabase<any>;
   private apiUrl: string;
   private authToken: string | null = null;
+  private isSyncing: boolean = false;
 
   constructor(db: ExpoSQLiteDatabase<any>, apiUrl: string) {
     this.db = db;
@@ -25,20 +27,17 @@ export class SyncEngine {
 
   /**
    * Get last sync timestamp from local storage
-   * In a real app, you'd use AsyncStorage or similar
    */
   private async getLastSyncTimestamp(): Promise<number | null> {
-    // TODO: Implement persistent storage
-    // For now, return null (first sync every time)
-    return null;
+    const stored = await Storage.getItem("lastSyncTimestamp");
+    return stored ? Number(stored) : null;
   }
 
   /**
    * Save sync timestamp to local storage
    */
   private async saveLastSyncTimestamp(timestamp: number): Promise<void> {
-    // TODO: Implement persistent storage
-    console.log("Saving sync timestamp:", timestamp);
+    await Storage.setItem("lastSyncTimestamp", String(timestamp));
   }
 
   /**
@@ -103,6 +102,12 @@ export class SyncEngine {
    * Pushes local changes and pulls remote changes
    */
   async syncTodos(): Promise<{ synced: number; pulled: number }> {
+    // Prevent concurrent syncs
+    if (this.isSyncing) {
+      throw new Error("Sync already in progress");
+    }
+
+    this.isSyncing = true;
     try {
       const lastSyncTimestamp = await this.getLastSyncTimestamp();
       const localChanges = this.getLocalChanges();
@@ -149,6 +154,8 @@ export class SyncEngine {
     } catch (error) {
       console.error("Sync error:", error);
       throw error;
+    } finally {
+      this.isSyncing = false;
     }
   }
 }
