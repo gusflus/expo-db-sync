@@ -129,17 +129,22 @@ export class SyncEngine {
         );
       }
 
-      const data: SyncResponse = await response.json();
+      const data = (await response.json()) as SyncResponse;
+
+      // Only apply remote items that are NOT soft-deleted. We do not pull
+      // soft-deleted items from the server to avoid resurrecting deletions
+      // on the client side.
+      const remoteItems = data.items.filter((item) => item.deletedAt == null);
 
       // Apply remote changes to local database
-      this.applyRemoteChanges(data.items);
+      this.applyRemoteChanges(remoteItems);
 
       // Save new sync timestamp
       await this.saveLastSyncTimestamp(data.syncTimestamp);
 
       return {
         synced: data.synced,
-        pulled: data.items.length,
+        pulled: remoteItems.length,
       };
     } catch (error) {
       console.error("Sync error:", error);
